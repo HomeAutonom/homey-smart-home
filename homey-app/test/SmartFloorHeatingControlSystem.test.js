@@ -52,7 +52,7 @@ describe('SmartFloorHeatingControlSystem — constructor & defaults', () => {
     assertType(zone.floorMaterial, 'string');
     assertType(zone.targetTemp, 'number');
     assertType(zone.currentTemp, 'number');
-    assertType(zone.heatingActive, 'boolean');
+    assertType(zone.heatingState, 'boolean');
     cleanup(sys);
   });
 
@@ -176,7 +176,7 @@ describe('SmartFloorHeatingControlSystem — temperature control', () => {
 
   it('setZoneTemp validates range', () => {
     const sys = new SmartFloorHeatingControlSystem(createMockHomey());
-    assertThrows(() => sys.setZoneTemp('vardagsrum', 50), 'temperature');
+    assertThrows(() => sys.setZoneTemp('vardagsrum', 50), 'Temperature');
     cleanup(sys);
   });
 
@@ -276,7 +276,7 @@ describe('SmartFloorHeatingControlSystem — scheduling', () => {
       { start: '08:00', end: '20:00', mode: 'comfort' },
       { start: '20:00', end: '08:00', mode: 'eco' }
     ];
-    sys.setSchedule('vardagsrum', 'monday', newPeriods);
+    sys.setSchedule('vardagsrum', { periods: { monday: newPeriods } });
     const sched = sys.getSchedule('vardagsrum');
     assertEqual(sched.periods.monday.length, 2);
     assertEqual(sched.periods.monday[0].start, '08:00');
@@ -366,7 +366,7 @@ describe('SmartFloorHeatingControlSystem — occupancy & geofencing', () => {
 describe('SmartFloorHeatingControlSystem — door/window sensors', () => {
   it('registerDoorWindowSensor and updateDoorWindowSensor', () => {
     const sys = new SmartFloorHeatingControlSystem(createMockHomey());
-    sys.registerDoorWindowSensor('vardagsrum', 'sensor-1');
+    sys.registerDoorWindowSensor('sensor-1', 'vardagsrum');
     sys.updateDoorWindowSensor('sensor-1', true);
     // Window open should be reflected
     assert(sys._isWindowOpen('vardagsrum'), 'should detect open window');

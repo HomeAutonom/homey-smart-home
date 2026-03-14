@@ -1,7 +1,7 @@
 'use strict';
 
 const { describe, it, run } = require('./helpers/runner');
-const { assert, assertEqual, assertThrows, assertType } = require('./helpers/assert');
+const { assert, assertEqual, assertType } = require('./helpers/assert');
 const { createMockHomey } = require('./helpers/mockHomey');
 
 /* ── timer-leak prevention ─────────────────────────────────────────── */
@@ -16,6 +16,10 @@ function cleanup(sys) {
     const h = activeHandles.pop();
     if (h.type === 'timeout') clearTimeout(h.id); else clearInterval(h.id);
   }
+}
+function clearDefaultDoors(sys) {
+  sys.doors.clear();
+  sys.doorMaintenance.clear();
 }
 
 const SmartPetDoorActivitySystem = require('../lib/SmartPetDoorActivitySystem');
@@ -62,8 +66,9 @@ describe('SmartPetDoorActivitySystem — door management', () => {
   it('registerDoor creates door with defaults', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
-    const door = sys.registerDoor({ id: 'front', location: 'Front door', size: 'large' });
-    assert(door, 'should return door');
+    clearDefaultDoors(sys);
+    const result = sys.registerDoor({ id: 'front', location: 'Front door', size: 'large' });
+    assert(result.success, 'should register door');
     assertEqual(sys.doors.size, 1);
     cleanup(sys);
   });
@@ -71,16 +76,19 @@ describe('SmartPetDoorActivitySystem — door management', () => {
   it('registerDoor enforces max doors limit', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     for (let i = 0; i < 6; i++) {
       sys.registerDoor({ id: `d${i}`, location: `loc${i}`, size: 'medium' });
     }
-    assertThrows(() => sys.registerDoor({ id: 'd6', location: 'extra', size: 'small' }), 'maximum');
+    const result = sys.registerDoor({ id: 'd6', location: 'extra', size: 'small' });
+    assertEqual(result.success, false);
     cleanup(sys);
   });
 
   it('lockDoor and unlockDoor toggle lock state', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.lockDoor('d1');
     assertEqual(sys.doors.get('d1').locked, true);
@@ -102,6 +110,7 @@ describe('SmartPetDoorActivitySystem — door management', () => {
   it('getDoorStatus returns correct info', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'large' });
     const status = sys.getDoorStatus('d1');
     assert(status, 'should return status');
@@ -112,6 +121,7 @@ describe('SmartPetDoorActivitySystem — door management', () => {
   it('getAllDoorStatuses returns all doors', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'front', size: 'small' });
     sys.registerDoor({ id: 'd2', location: 'back', size: 'large' });
     const all = sys.getAllDoorStatuses();
@@ -122,6 +132,7 @@ describe('SmartPetDoorActivitySystem — door management', () => {
   it('setDoorSize updates door size', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.setDoorSize('d1', 'large');
     assertEqual(sys.doors.get('d1').size, 'large');
@@ -131,6 +142,7 @@ describe('SmartPetDoorActivitySystem — door management', () => {
   it('updateDoorBattery sets battery level', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.updateDoorBattery('d1', 75);
     assertEqual(sys.doors.get('d1').batteryLevel, 75);
@@ -151,7 +163,8 @@ describe('SmartPetDoorActivitySystem — pet management', () => {
   it('registerPet requires rfidTagId', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
-    assertThrows(() => sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat' }), 'rfid');
+    const result = sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat' });
+    assertEqual(result.success, false);
     cleanup(sys);
   });
 
@@ -159,7 +172,8 @@ describe('SmartPetDoorActivitySystem — pet management', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
     sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat', rfidTagId: 'RF001' });
-    assertThrows(() => sys.registerPet({ id: 'cat2', name: 'Max', species: 'dog', rfidTagId: 'RF001' }), 'RFID');
+    const result = sys.registerPet({ id: 'cat2', name: 'Max', species: 'dog', rfidTagId: 'RF001' });
+    assertEqual(result.success, false);
     cleanup(sys);
   });
 
@@ -169,7 +183,8 @@ describe('SmartPetDoorActivitySystem — pet management', () => {
     for (let i = 0; i < 12; i++) {
       sys.registerPet({ id: `pet${i}`, name: `Pet${i}`, species: 'cat', rfidTagId: `RF${i}` });
     }
-    assertThrows(() => sys.registerPet({ id: 'pet12', name: 'Extra', species: 'cat', rfidTagId: 'RF99' }), 'maximum');
+    const result = sys.registerPet({ id: 'pet12', name: 'Extra', species: 'cat', rfidTagId: 'RF99' });
+    assertEqual(result.success, false);
     cleanup(sys);
   });
 
@@ -226,11 +241,12 @@ describe('SmartPetDoorActivitySystem — access schedules', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
     sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat', rfidTagId: 'RF001' });
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
-    sys.setAccessSchedule('cat1', 'd1', { startTime: '06:00', endTime: '22:00', days: ['monday', 'tuesday'] });
+    sys.setAccessSchedule('cat1', 'd1', { allowedHours: { start: '06:00', end: '22:00' }, days: ['monday', 'tuesday'] });
     const sched = sys.getAccessSchedule('cat1', 'd1');
     assert(sched, 'should return schedule');
-    assertEqual(sched.startTime, '06:00');
+    assertEqual(sched.allowedHours.start, '06:00');
     cleanup(sys);
   });
 
@@ -238,8 +254,10 @@ describe('SmartPetDoorActivitySystem — access schedules', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
     sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat', rfidTagId: 'RF001' });
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
-    assertThrows(() => sys.setAccessSchedule('cat1', 'd1', { startTime: '25:00', endTime: '22:00' }), 'time');
+    const result = sys.setAccessSchedule('cat1', 'd1', { allowedHours: { start: '25:00', end: '22:00' } });
+    assertEqual(result.success, false);
     cleanup(sys);
   });
 
@@ -279,6 +297,7 @@ describe('SmartPetDoorActivitySystem — activity logging', () => {
   it('logDoorEvent records activity', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat', rfidTagId: 'RF001' });
     sys.logDoorEvent('cat1', 'd1', 'out', 0.95);
@@ -302,6 +321,7 @@ describe('SmartPetDoorActivitySystem — activity logging', () => {
   it('getActivityLog returns filtered results', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat', rfidTagId: 'RF001' });
     sys.registerPet({ id: 'dog1', name: 'Max', species: 'dog', rfidTagId: 'RF002' });
@@ -317,6 +337,7 @@ describe('SmartPetDoorActivitySystem — intruder detection', () => {
   it('processRfidScan detects unknown RFID as intruder', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.processRfidScan('d1', 'UNKNOWN_RF', 'small');
     assert(sys.intruderDetection.blockedAttempts > 0, 'should block intruder');
@@ -338,17 +359,21 @@ describe('SmartPetDoorActivitySystem — GPS & geofencing', () => {
   it('setHomeLocation configures home coords', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
-    sys.setHomeLocation(59.3293, 18.0686);
-    assertEqual(sys.gpsConfig.homeLat, 59.3293);
-    assertEqual(sys.gpsConfig.homeLng, 18.0686);
+    sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat', rfidTagId: 'RF001' });
+    sys.setHomeLocation('cat1', 59.3293, 18.0686);
+    const gps = sys.gpsData.get('cat1');
+    assertEqual(gps.homeLocation.lat, 59.3293);
+    assertEqual(gps.homeLocation.lng, 18.0686);
     cleanup(sys);
   });
 
   it('setGeofenceRadius updates radius', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
-    sys.setGeofenceRadius(200);
-    assertEqual(sys.gpsConfig.geofenceRadius, 200);
+    sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat', rfidTagId: 'RF001' });
+    sys.setGeofenceRadius('cat1', 200);
+    const gps = sys.gpsData.get('cat1');
+    assertEqual(gps.geofenceRadius, 200);
     cleanup(sys);
   });
 
@@ -386,6 +411,7 @@ describe('SmartPetDoorActivitySystem — emergency lockdown', () => {
   it('activateEmergencyLockdown locks all doors', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'front', size: 'medium' });
     sys.registerDoor({ id: 'd2', location: 'back', size: 'large' });
     sys.activateEmergencyLockdown();
@@ -513,6 +539,7 @@ describe('SmartPetDoorActivitySystem — camera & door maintenance', () => {
   it('getDoorMaintenanceReport returns door health', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     const report = sys.getDoorMaintenanceReport('d1');
     assert(report, 'should return report');
@@ -522,6 +549,7 @@ describe('SmartPetDoorActivitySystem — camera & door maintenance', () => {
   it('recordBatteryReplacement updates maintenance', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.recordBatteryReplacement('d1');
     const maint = sys.doorMaintenance.get('d1');
@@ -532,6 +560,7 @@ describe('SmartPetDoorActivitySystem — camera & door maintenance', () => {
   it('recordHingeLubrication updates hinge data', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.recordHingeLubrication('d1');
     const maint = sys.doorMaintenance.get('d1');
@@ -544,6 +573,7 @@ describe('SmartPetDoorActivitySystem — statistics & reports', () => {
   it('getStatistics returns comprehensive stats', () => {
     const sys = new SmartPetDoorActivitySystem(createMockHomey());
     sys.initialize();
+    clearDefaultDoors(sys);
     sys.registerDoor({ id: 'd1', location: 'back', size: 'medium' });
     sys.registerPet({ id: 'cat1', name: 'Luna', species: 'cat', rfidTagId: 'RF001' });
     const stats = sys.getStatistics();

@@ -1,7 +1,7 @@
 'use strict';
 
 const { describe, it, run } = require('./helpers/runner');
-const { assert, assertEqual, assertThrows, assertType } = require('./helpers/assert');
+const { assert, assertEqual, _assertThrows, assertType } = require('./helpers/assert');
 const { createMockHomey } = require('./helpers/mockHomey');
 
 /* ── timer-leak prevention ─────────────────────────────────────────── */
@@ -57,17 +57,17 @@ describe('AdvancedPackageDeliveryManagementSystem — constructor & init', () =>
     cleanup(sys);
   });
 
-  it('initialize loads sample packages and starts intervals', () => {
+  it('initialize loads sample packages and starts intervals', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     assert(sys.initialized, 'should be initialized');
     assert(sys.packages.size > 0, 'should have sample packages');
     cleanup(sys);
   });
 
-  it('destroy clears all intervals', () => {
+  it('destroy clears all intervals', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.destroy();
     assertEqual(sys.intervals.length, 0);
     cleanup(sys);
@@ -75,9 +75,9 @@ describe('AdvancedPackageDeliveryManagementSystem — constructor & init', () =>
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — package management', () => {
-  it('addPackage creates a new package', () => {
+  it('addPackage creates a new package', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const pkg = sys.addPackage({
       trackingNumber: 'TEST-001',
       carrier: 'postnord',
@@ -93,14 +93,14 @@ describe('AdvancedPackageDeliveryManagementSystem — package management', () =>
 
   it('addPackage requires tracking number and carrier', () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
-    assertThrows(() => sys.addPackage({ description: 'No tracking' }), 'tracking');
+    const result = sys.addPackage({ description: 'No tracking' });
+    assertEqual(result, null);
     cleanup(sys);
   });
 
-  it('addPackage auto-insures high-value packages', () => {
+  it('addPackage auto-insures high-value packages', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const pkg = sys.addPackage({
       trackingNumber: 'TEST-HV',
       carrier: 'dhl',
@@ -112,9 +112,9 @@ describe('AdvancedPackageDeliveryManagementSystem — package management', () =>
     cleanup(sys);
   });
 
-  it('addPackage handles international packages with customs', () => {
+  it('addPackage handles international packages with customs', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const pkg = sys.addPackage({
       trackingNumber: 'TEST-INT',
       carrier: 'fedex',
@@ -127,9 +127,9 @@ describe('AdvancedPackageDeliveryManagementSystem — package management', () =>
     cleanup(sys);
   });
 
-  it('trackPackage returns enriched package info', () => {
+  it('trackPackage returns enriched package info', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.addPackage({ trackingNumber: 'TRK-001', carrier: 'postnord', description: 'Test', sender: 'A', value: 50 });
     const info = sys.trackPackage('TRK-001');
     assert(info, 'should return info');
@@ -137,9 +137,9 @@ describe('AdvancedPackageDeliveryManagementSystem — package management', () =>
     cleanup(sys);
   });
 
-  it('trackPackage returns null for unknown package', () => {
+  it('trackPackage returns null for unknown package', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const info = sys.trackPackage('NONEXISTENT');
     assertEqual(info, null);
     cleanup(sys);
@@ -149,11 +149,12 @@ describe('AdvancedPackageDeliveryManagementSystem — package management', () =>
 describe('AdvancedPackageDeliveryManagementSystem — status transitions', () => {
   it('updatePackageStatus follows valid FSM transitions', () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
     sys.addPackage({ trackingNumber: 'FSM-001', carrier: 'dhl', description: 'FSM test', sender: 'B', value: 100 });
-    // Default status is 'confirmed', valid transition to 'shipped'
+    // Default status is 'ordered', valid transition: ordered → confirmed → shipped
+    const step1 = sys.updatePackageStatus('FSM-001', 'confirmed');
+    assert(step1, 'ordered → confirmed should succeed');
     const result = sys.updatePackageStatus('FSM-001', 'shipped');
-    assert(result, 'should succeed');
+    assert(result, 'confirmed → shipped should succeed');
     const pkg = sys.packages.get('FSM-001');
     assertEqual(pkg.status, 'shipped');
     cleanup(sys);
@@ -161,17 +162,17 @@ describe('AdvancedPackageDeliveryManagementSystem — status transitions', () =>
 
   it('updatePackageStatus rejects invalid transitions', () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
     sys.addPackage({ trackingNumber: 'FSM-002', carrier: 'ups', description: 'FSM test', sender: 'C', value: 50 });
-    // confirmed → delivered is not a valid direct transition
-    assertThrows(() => sys.updatePackageStatus('FSM-002', 'delivered'), 'transition');
+    // ordered → delivered is not a valid direct transition — returns false
+    const result = sys.updatePackageStatus('FSM-002', 'delivered');
+    assertEqual(result, false);
     cleanup(sys);
   });
 
-  it('updatePackageStatus throws for unknown package', () => {
+  it('updatePackageStatus returns false for unknown package', () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
-    assertThrows(() => sys.updatePackageStatus('UNKNOWN', 'shipped'), 'not found');
+    const result = sys.updatePackageStatus('UNKNOWN', 'shipped');
+    assertEqual(result, false);
     cleanup(sys);
   });
 });
@@ -179,9 +180,9 @@ describe('AdvancedPackageDeliveryManagementSystem — status transitions', () =>
 describe('AdvancedPackageDeliveryManagementSystem — returns', () => {
   it('initiateReturn creates return package', () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
     sys.addPackage({ trackingNumber: 'RET-001', carrier: 'postnord', description: 'Return test', sender: 'D', value: 200 });
-    // Move through states to delivered
+    // Move through states: ordered → confirmed → shipped → in-transit → out-for-delivery → delivered
+    sys.updatePackageStatus('RET-001', 'confirmed');
     sys.updatePackageStatus('RET-001', 'shipped');
     sys.updatePackageStatus('RET-001', 'in-transit');
     sys.updatePackageStatus('RET-001', 'out-for-delivery');
@@ -193,25 +194,25 @@ describe('AdvancedPackageDeliveryManagementSystem — returns', () => {
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — queries', () => {
-  it('getActivePackages returns non-terminal packages', () => {
+  it('getActivePackages returns non-terminal packages', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const active = sys.getActivePackages();
     assert(Array.isArray(active), 'should be array');
     cleanup(sys);
   });
 
-  it('getDeliveryHistory returns filtered history', () => {
+  it('getDeliveryHistory returns filtered history', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const history = sys.getDeliveryHistory({});
     assert(Array.isArray(history), 'should be array');
     cleanup(sys);
   });
 
-  it('getDeliveryHistory filters by carrier', () => {
+  it('getDeliveryHistory filters by carrier', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const history = sys.getDeliveryHistory({ carrier: 'postnord' });
     for (const h of history) {
       assertEqual(h.carrier, 'postnord');
@@ -219,9 +220,9 @@ describe('AdvancedPackageDeliveryManagementSystem — queries', () => {
     cleanup(sys);
   });
 
-  it('getCarrierReliability returns per-carrier stats', () => {
+  it('getCarrierReliability returns per-carrier stats', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const reliability = sys.getCarrierReliability();
     assert(reliability, 'should return reliability data');
     cleanup(sys);
@@ -229,9 +230,9 @@ describe('AdvancedPackageDeliveryManagementSystem — queries', () => {
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — community network', () => {
-  it('getCommunityStatus returns network state', () => {
+  it('getCommunityStatus returns network state', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const status = sys.getCommunityStatus();
     assert(status, 'should return status');
     cleanup(sys);
@@ -239,43 +240,43 @@ describe('AdvancedPackageDeliveryManagementSystem — community network', () => 
 
   it('acceptNeighborPackage holds package for neighbor', () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
-    const result = sys.acceptNeighborPackage({ neighborId: 'n1', trackingNumber: 'NBR-001', description: 'Neighbor pkg' });
+    const result = sys.acceptNeighborPackage('neighbor-1', 'Neighbor pkg');
     assert(result, 'should accept package');
+    assert(result.id, 'should have held id');
+    assertEqual(result.neighborId, 'neighbor-1');
     cleanup(sys);
   });
 
   it('releaseNeighborPackage marks as picked up', () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
-    sys.acceptNeighborPackage({ neighborId: 'n1', trackingNumber: 'NBR-002', description: 'Neighbor pkg' });
-    const result = sys.releaseNeighborPackage('NBR-002');
+    const held = sys.acceptNeighborPackage('neighbor-2', 'Neighbor pkg 2');
+    const result = sys.releaseNeighborPackage(held.id);
     assert(result, 'should release package');
     cleanup(sys);
   });
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — delivery points', () => {
-  it('getDeliveryPointStatus returns all points', () => {
+  it('getDeliveryPointStatus returns all points', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const status = sys.getDeliveryPointStatus();
     assert(status, 'should return status');
     assertEqual(Object.keys(status).length, 4);
     cleanup(sys);
   });
 
-  it('getDeliveryWindows returns configured windows', () => {
+  it('getDeliveryWindows returns configured windows', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const windows = sys.getDeliveryWindows();
     assert(windows, 'should return windows');
     cleanup(sys);
   });
 
-  it('setPreferredDeliveryWindow updates preference', () => {
+  it('setPreferredDeliveryWindow updates preference', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const windowIds = Object.keys(sys.deliveryWindows);
     if (windowIds.length > 0) {
       const result = sys.setPreferredDeliveryWindow(windowIds[0], true);
@@ -286,18 +287,18 @@ describe('AdvancedPackageDeliveryManagementSystem — delivery points', () => {
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — recurring deliveries', () => {
-  it('getRecurringDeliveries returns subscription list', () => {
+  it('getRecurringDeliveries returns subscription list', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const recurring = sys.getRecurringDeliveries();
     assert(Array.isArray(recurring), 'should be array');
     assert(recurring.length >= 4, 'should have sample subscriptions');
     cleanup(sys);
   });
 
-  it('addRecurringDelivery creates subscription', () => {
+  it('addRecurringDelivery creates subscription', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const sub = sys.addRecurringDelivery({
       name: 'Coffee subscription',
       carrier: 'postnord',
@@ -310,9 +311,9 @@ describe('AdvancedPackageDeliveryManagementSystem — recurring deliveries', () 
     cleanup(sys);
   });
 
-  it('cancelRecurringDelivery deactivates subscription', () => {
+  it('cancelRecurringDelivery deactivates subscription', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const sub = sys.addRecurringDelivery({
       name: 'Test sub',
       carrier: 'dhl',
@@ -325,9 +326,9 @@ describe('AdvancedPackageDeliveryManagementSystem — recurring deliveries', () 
     cleanup(sys);
   });
 
-  it('cancelRecurringDelivery returns false for unknown', () => {
+  it('cancelRecurringDelivery returns false for unknown', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const result = sys.cancelRecurringDelivery('non-existent');
     assertEqual(result, false);
     cleanup(sys);
@@ -335,9 +336,9 @@ describe('AdvancedPackageDeliveryManagementSystem — recurring deliveries', () 
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — customs', () => {
-  it('getCustomsInfo returns customs data for international package', () => {
+  it('getCustomsInfo returns customs data for international package', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.addPackage({
       trackingNumber: 'CUST-001', carrier: 'fedex', description: 'Import',
       sender: 'Overseas', value: 300, origin: 'CN'
@@ -350,18 +351,18 @@ describe('AdvancedPackageDeliveryManagementSystem — customs', () => {
     cleanup(sys);
   });
 
-  it('getCustomsInfo returns null for domestic package', () => {
+  it('getCustomsInfo returns null for domestic package', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.addPackage({ trackingNumber: 'DOM-001', carrier: 'postnord', description: 'Local', sender: 'A', value: 50 });
     const customs = sys.getCustomsInfo('DOM-001');
     assertEqual(customs, null);
     cleanup(sys);
   });
 
-  it('getCustomsInfo identifies EU origin', () => {
+  it('getCustomsInfo identifies EU origin', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.addPackage({
       trackingNumber: 'EU-001', carrier: 'dhl', description: 'From Germany',
       sender: 'DE Shop', value: 200, origin: 'DE'
@@ -374,9 +375,9 @@ describe('AdvancedPackageDeliveryManagementSystem — customs', () => {
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — insurance', () => {
-  it('getInsuranceStatus returns insured packages', () => {
+  it('getInsuranceStatus returns insured packages', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const status = sys.getInsuranceStatus();
     assert(status, 'should return status');
     assert(status.config, 'has config');
@@ -386,18 +387,18 @@ describe('AdvancedPackageDeliveryManagementSystem — insurance', () => {
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — theft prevention', () => {
-  it('getTheftPreventionStatus returns current config', () => {
+  it('getTheftPreventionStatus returns current config', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const status = sys.getTheftPreventionStatus();
     assertType(status.motionDetectionEnabled, 'boolean');
     assert(Array.isArray(status.recentIncidents), 'has incidents');
     cleanup(sys);
   });
 
-  it('setTheftPreventionConfig updates settings', () => {
+  it('setTheftPreventionConfig updates settings', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const result = sys.setTheftPreventionConfig({
       motionDetectionEnabled: true,
       sensitivityThreshold: 0.9
@@ -406,9 +407,9 @@ describe('AdvancedPackageDeliveryManagementSystem — theft prevention', () => {
     cleanup(sys);
   });
 
-  it('setTheftPreventionConfig clamps sensitivity 0-1', () => {
+  it('setTheftPreventionConfig clamps sensitivity 0-1', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.setTheftPreventionConfig({ sensitivityThreshold: 5 });
     assertEqual(sys.theftPrevention.motionSensitivityThreshold, 1);
     sys.setTheftPreventionConfig({ sensitivityThreshold: -1 });
@@ -418,9 +419,9 @@ describe('AdvancedPackageDeliveryManagementSystem — theft prevention', () => {
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — analytics & statistics', () => {
-  it('getStatistics returns comprehensive summary', () => {
+  it('getStatistics returns comprehensive summary', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const stats = sys.getStatistics();
     assert(stats, 'should return stats');
     assertType(stats.totalPackages, 'number');
@@ -431,9 +432,9 @@ describe('AdvancedPackageDeliveryManagementSystem — analytics & statistics', (
     cleanup(sys);
   });
 
-  it('getMonthlyAnalytics returns null for empty month', () => {
+  it('getMonthlyAnalytics returns null for empty month', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const analytics = sys.getMonthlyAnalytics('2020-01');
     assertEqual(analytics, null);
     cleanup(sys);
@@ -441,9 +442,9 @@ describe('AdvancedPackageDeliveryManagementSystem — analytics & statistics', (
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — driver instructions', () => {
-  it('getDriverInstructions returns carrier instructions', () => {
+  it('getDriverInstructions returns carrier instructions', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const instructions = sys.getDriverInstructions('postnord');
     assert(instructions, 'should return instructions');
     assertEqual(instructions.carrier, 'PostNord');
@@ -451,25 +452,25 @@ describe('AdvancedPackageDeliveryManagementSystem — driver instructions', () =
     cleanup(sys);
   });
 
-  it('getDriverInstructions returns null for unknown carrier', () => {
+  it('getDriverInstructions returns null for unknown carrier', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const instructions = sys.getDriverInstructions('nonexistent');
     assertEqual(instructions, null);
     cleanup(sys);
   });
 
-  it('setDriverInstructions updates instructions', () => {
+  it('setDriverInstructions updates instructions', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const result = sys.setDriverInstructions('postnord', 'Leave at front door');
     assertEqual(result, true);
     cleanup(sys);
   });
 
-  it('setDriverInstructions returns false for unknown carrier', () => {
+  it('setDriverInstructions returns false for unknown carrier', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     const result = sys.setDriverInstructions('fake', 'Instructions');
     assertEqual(result, false);
     cleanup(sys);
@@ -477,10 +478,11 @@ describe('AdvancedPackageDeliveryManagementSystem — driver instructions', () =
 });
 
 describe('AdvancedPackageDeliveryManagementSystem — photo & collection', () => {
-  it('verifyDeliveryPhoto marks photo verified', () => {
+  it('verifyDeliveryPhoto marks photo verified', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.addPackage({ trackingNumber: 'PHO-001', carrier: 'postnord', description: 'Photo test', sender: 'E', value: 50 });
+    sys.updatePackageStatus('PHO-001', 'confirmed');
     sys.updatePackageStatus('PHO-001', 'shipped');
     sys.updatePackageStatus('PHO-001', 'in-transit');
     sys.updatePackageStatus('PHO-001', 'out-for-delivery');
@@ -490,19 +492,20 @@ describe('AdvancedPackageDeliveryManagementSystem — photo & collection', () =>
     cleanup(sys);
   });
 
-  it('verifyDeliveryPhoto returns false for non-delivered', () => {
+  it('verifyDeliveryPhoto returns false for non-delivered', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.addPackage({ trackingNumber: 'PHO-002', carrier: 'dhl', description: 'Not delivered', sender: 'F', value: 50 });
     const result = sys.verifyDeliveryPhoto('PHO-002');
     assertEqual(result, false);
     cleanup(sys);
   });
 
-  it('collectPackage collected a delivered package', () => {
+  it('collectPackage collected a delivered package', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.addPackage({ trackingNumber: 'COL-001', carrier: 'postnord', description: 'Collect test', sender: 'G', value: 100 });
+    sys.updatePackageStatus('COL-001', 'confirmed');
     sys.updatePackageStatus('COL-001', 'shipped');
     sys.updatePackageStatus('COL-001', 'in-transit');
     sys.updatePackageStatus('COL-001', 'out-for-delivery');
@@ -512,9 +515,9 @@ describe('AdvancedPackageDeliveryManagementSystem — photo & collection', () =>
     cleanup(sys);
   });
 
-  it('collectPackage returns false for non-delivered', () => {
+  it('collectPackage returns false for non-delivered', async () => {
     const sys = new AdvancedPackageDeliveryManagementSystem(createMockHomey());
-    sys.initialize();
+    await sys.initialize();
     sys.addPackage({ trackingNumber: 'COL-002', carrier: 'dhl', description: 'Not delivered', sender: 'H', value: 50 });
     const result = sys.collectPackage('COL-002');
     assertEqual(result, false);
