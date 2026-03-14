@@ -8,6 +8,7 @@ const path = require('path');
 require('dotenv').config();
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const logger = require('./logger');
 
 // Import advanced modules
 const PredictiveAnalytics = require('./predictive-analytics');
@@ -23,11 +24,11 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost,http:/
 
 // ── Process error handlers ──
 process.on('unhandledRejection', (reason, _promise) => {
-  console.error('[FATAL] Unhandled Promise Rejection:', reason);
+  logger.fatal({ err: reason }, 'Unhandled Promise Rejection');
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('[FATAL] Uncaught Exception:', err);
+  logger.fatal({ err }, 'Uncaught Exception');
   process.exit(1);
 });
 
@@ -195,7 +196,7 @@ class HomeyClient {
       return await response.json();
     } catch (error) {
       clearTimeout(timer);
-      console.error(`Homey API error: ${error.message}`);
+      logger.error({ err: error }, 'Homey API error');
       return { error: error.message };
     }
   }
@@ -345,7 +346,7 @@ app.post('/api/device/:deviceId/capability/:capability', requireAuth, async (req
     io.emit('device-updated', { deviceId, capability, value });
     res.json({ success: true, result });
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -361,7 +362,7 @@ app.post('/api/scene/:sceneId', requireAuth, async (req, res) => {
     io.emit('scene-activated', { sceneId });
     res.json({ success: true, sceneId });
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -405,7 +406,7 @@ app.post('/api/security/mode', requireAuth, (req, res) => {
     io.emit('security-mode-changed', { mode });
     res.json({ success: true, mode });
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -420,7 +421,7 @@ app.get('/api/analytics/energy', requireAuth, async (req, res) => {
     const energyAnalysis = await analytics.analyzeEnergyConsumption(data);
     res.json(energyAnalysis);
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -431,7 +432,7 @@ app.get('/api/analytics/climate', requireAuth, async (req, res) => {
     const climateAnalysis = await analytics.analyzeClimate(data);
     res.json(climateAnalysis);
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -442,7 +443,7 @@ app.get('/api/analytics/devices', requireAuth, async (req, res) => {
     const deviceAnalysis = await analytics.analyzeDeviceUsage(data);
     res.json(deviceAnalysis);
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -453,7 +454,7 @@ app.get('/api/analytics/insights', requireAuth, async (req, res) => {
     const insights = await analytics.generateInsights(data);
     res.json(insights);
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -468,7 +469,7 @@ app.get('/api/analytics/predictions', requireAuth, async (req, res) => {
     };
     res.json(predictions);
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -487,7 +488,7 @@ app.get('/api/analytics/recommendations', requireAuth, async (req, res) => {
     
     res.json(recommendations);
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -515,7 +516,7 @@ app.get('/api/dashboard/advanced', requireAuth, async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Request error:', error);
+    logger.error({ err: error }, 'Request error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -540,7 +541,7 @@ async function getDashboardData() {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  logger.info({ socketId: socket.id }, 'Client connected');
 
   socket.on('subscribe-device', (deviceId) => {
     if (!deviceId || typeof deviceId !== 'string' || deviceId.length > 128) {
@@ -573,7 +574,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    logger.info({ socketId: socket.id }, 'Client disconnected');
   });
 });
 
@@ -589,7 +590,7 @@ if (require.main === module) {
       io.emit('energy:update', data.energy);
       io.emit('energy-update', data.energy);
     } catch (error) {
-      console.error('Update error:', error);
+      logger.error({ err: error }, 'Periodic update error');
     }
   }, 5000);
 }
@@ -632,7 +633,7 @@ async function bootModules() {
     moduleLoader.modules.set('scene-builder', sceneBuilder);
     moduleLoader.statuses.set('scene-builder', 'ready');
   } catch (err) {
-    console.error('Scene Builder module failed:', err.message);
+    logger.error({ err }, 'Scene Builder module failed');
   }
 
   return result;
@@ -643,7 +644,7 @@ async function bootModules() {
 // ============================================
 
 const gracefulShutdown = (signal) => {
-  console.log(`\n${signal} received — shutting down gracefully…`);
+  logger.info({ signal }, 'Shutting down gracefully…');
 
   if (periodicUpdateInterval) clearInterval(periodicUpdateInterval);
 
@@ -656,17 +657,17 @@ const gracefulShutdown = (signal) => {
 
   // Stop accepting new connections
   httpServer.close(() => {
-    console.log('HTTP server closed');
+    logger.info('HTTP server closed');
   });
 
   // Disconnect all Socket.IO clients
   io.close(() => {
-    console.log('Socket.IO closed');
+    logger.info('Socket.IO closed');
   });
 
   // Give ongoing requests time to complete
   setTimeout(() => {
-    console.log('Cleanup complete. Exiting.');
+    logger.info('Cleanup complete. Exiting.');
     process.exit(0);
   }, 3000);
 };
@@ -696,15 +697,15 @@ module.exports = { app, _cleanup };
 // Start server only when run directly (not when imported for testing)
 if (require.main === module) {
   httpServer.listen(PORT, async () => {
-    console.log(`🏠 Smart Home Dashboard running at http://localhost:${PORT}`);
-    console.log(`📡 Homey connection: ${HOMEY_URL}`);
+    logger.info({ port: PORT }, '🏠 Smart Home Dashboard running');
+    logger.info({ homeyUrl: HOMEY_URL }, '📡 Homey connection');
 
     // Boot all feature modules after server is listening
     try {
       const result = await bootModules();
-      console.log(`📦 ${result.ready}/${result.total} modules ready`);
+      logger.info({ ready: result.ready, total: result.total }, '📦 Modules booted');
     } catch (err) {
-      console.error('Module boot error:', err.message);
+      logger.error({ err }, 'Module boot error');
     }
   });
 }
