@@ -1,0 +1,19 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  security:
+    uses: Ai-road-4-You/enterprise-ci-cd/.github/workflows/security-scan.yml@v1
+    with:
+      language: "javascript"
+    secrets: inherit
