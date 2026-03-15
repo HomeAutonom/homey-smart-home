@@ -17,10 +17,10 @@ jobs:
       matrix:
         node-version: [22.x]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
@@ -45,7 +45,7 @@ jobs:
       # INF-20: Archive test artifacts
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.node-version }}
           path: |
@@ -56,10 +56,10 @@ jobs:
   security-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22.x'
 
@@ -82,26 +82,26 @@ jobs:
       # Required for Trivy to post results to the Security tab
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # INF-19: Install cosign for keyless image signing
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.8.0
+        uses: sigstore/cosign-installer@v4.1.0
 
       # ── homey-app ────────────────────────────────────────────────────────────
 
       - name: Build homey-app image (local load for scanning)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./homey-app
           # Load into the local Docker daemon so Trivy can scan before pushing
@@ -115,7 +115,7 @@ jobs:
 
       # INF-10: Trivy scan — homey-app
       - name: Scan homey-app image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/smarthomepro:${{ github.sha }}
           format: sarif
@@ -126,14 +126,14 @@ jobs:
 
       - name: Upload Trivy results for homey-app
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-homey-app.sarif
           category: trivy-homey-app
 
       - name: Push homey-app image
         if: github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./homey-app
           push: true
@@ -153,7 +153,7 @@ jobs:
       # INF-19: Attach SBOM attestation for homey-app
       - name: Generate SBOM for homey-app
         if: github.ref == 'refs/heads/main'
-        uses: anchore/sbom-action@v0.18.0
+        uses: anchore/sbom-action@v0.23.1
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/smarthomepro:${{ github.sha }}
           format: spdx-json
@@ -170,7 +170,7 @@ jobs:
       # ── web-dashboard ────────────────────────────────────────────────────────
 
       - name: Build web-dashboard image (local load for scanning)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./web-dashboard
           load: true
@@ -183,7 +183,7 @@ jobs:
 
       # INF-10: Trivy scan — web-dashboard
       - name: Scan web-dashboard image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/smarthome-dashboard:${{ github.sha }}
           format: sarif
@@ -194,14 +194,14 @@ jobs:
 
       - name: Upload Trivy results for web-dashboard
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-dashboard.sarif
           category: trivy-dashboard
 
       - name: Push web-dashboard image
         if: github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./web-dashboard
           push: true
@@ -221,7 +221,7 @@ jobs:
       # INF-19: Attach SBOM attestation for web-dashboard
       - name: Generate SBOM for web-dashboard
         if: github.ref == 'refs/heads/main'
-        uses: anchore/sbom-action@v0.18.0
+        uses: anchore/sbom-action@v0.23.1
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/smarthome-dashboard:${{ github.sha }}
           format: spdx-json
@@ -239,7 +239,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint-and-test, security-audit]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Create .env for CI
         run: cp .env.example .env
@@ -257,7 +257,7 @@ jobs:
         run: curl -f http://localhost/nginx-health || (docker compose logs && exit 1)
 
       - name: Setup Node.js for integration tests
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22.x'
 
