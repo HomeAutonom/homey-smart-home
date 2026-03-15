@@ -39,7 +39,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "husky": "^9.1.7",
-    "lint-staged": "^15.4.3"
+    "lint-staged": "^16.4.0"
   },
   "lint-staged": {
     "homey-app/**/*.js": [
