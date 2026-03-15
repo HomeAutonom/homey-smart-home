@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ci:
+    uses: Ai-road-4-You/enterprise-ci-cd/.github/workflows/ci-node.yml@v1
+    with:
+      node-version: "20"
+      package-manager: "npm"
+    secrets: inherit
