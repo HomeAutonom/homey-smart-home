@@ -1,0 +1,31 @@
+name: CI — Docker
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web-dashboard/Dockerfile'
+      - 'web-dashboard/**'
+      - '.github/workflows/ci-docker.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web-dashboard/Dockerfile'
+      - 'web-dashboard/**'
+      - '.github/workflows/ci-docker.yml'
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  id-token: write
+  attestations: write
+
+jobs:
+  docker:
+    uses: Ai-road-4-You/enterprise-ci-cd/.github/workflows/ci-docker.yml@main
+    with:
+      image-name: "homey-smart-home"
+      dockerfile: "web-dashboard/Dockerfile"
+      context: "web-dashboard"
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    secrets: inherit
